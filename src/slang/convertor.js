@@ -317,11 +317,11 @@ function latexToSlang(latex, options = {}) {
         throw new Error('Empty LaTeX expression');
     }
     
-    try {
+       try {
         // Strategy 1: Try functions first (trigonometric, etc.)
-        // Check for functions with proper pattern
-        const funcMatch = latex.match(/^\\(sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|sinh|cosh|tanh|ln|log|exp|sqrt)\s*\{([^{}]+)\}$/);
-        if (funcMatch) {
+        // Matches \sin(x), \ln{x}, etc.
+        const funcRegex = /^\\(sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|sinh|cosh|tanh|ln|log|exp|sqrt)\s*(?:\(([^)]+)\)|\{([^}]+)\})$/;
+        if (funcRegex.test(latex)) {
             return parseFunction(latex);
         }
         
@@ -357,19 +357,32 @@ function latexToSlang(latex, options = {}) {
 }
 
 /**
- * Parse LaTeX functions like sin(x), cos(x), etc.
+ * Parse LaTeX functions like \sin(x), \cos(x), etc.
  */
 function parseFunction(funcStr) {
-    const funcMatch = funcStr.match(/\\(sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|sinh|cosh|tanh|ln|log|exp|sqrt)\s*\{([^{}]+)\}/);
-    if (!funcMatch) {
+    const funcRegex = /^\\(sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|sinh|cosh|tanh|ln|log|exp|sqrt)\s*(?:\(([^)]+)\)|\{([^}]+)\})$/;
+    const match = funcStr.match(funcRegex);
+    if (!match) {
         throw new Error(`Invalid function format: ${funcStr}`);
     }
+    const funcName = match[1];
+    // match[2] is parentheses content, match[3] is braces content
+    const argStr = (match[2] !== undefined ? match[2] : match[3]).trim();
     
-    const funcName = funcMatch[1];
-    const argStr = funcMatch[2];
-    const arg = parsePolynomial(argStr);
+    let arg;
+    // Handle simple variable (e.g., 'x')
+    if (/^[a-zA-Z]$/.test(argStr)) {
+        arg = { terms: [{ coeff: 1, var: { [argStr]: 1 } }] };
+    } 
+    // Handle simple number (e.g., '2')
+    else if (/^\d+(\.\d+)?$/.test(argStr)) {
+        arg = { terms: [{ coeff: parseFloat(argStr) }] };
+    } 
+    // Fallback to polynomial parser for complex arguments
+    else {
+        arg = parsePolynomial(argStr);
+    }
     
-    // Return a special function structure
     return {
         type: 'function',
         name: funcName,
