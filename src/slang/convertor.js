@@ -117,13 +117,38 @@ function slangToLatex(expression, options = {}) {
     
     const opts = { ...defaults, ...options };
     
-    // Handle function expressions
-    if (expression.type === 'function') {
-        const funcName = expression.name;
-        const arg = expression.args[0];
-        const argLatex = slangToLatex(arg, opts);
-        return `\\${funcName}{${argLatex}}`;
+    // Handle Symbolic AST (from symbolic.js)
+if (expression && expression.type) {
+    switch (expression.type) {
+        case 'const': return expression.value.toString();
+        case 'var': return expression.name;
+        case 'fn': {
+            const argLatex = slangToLatex(expression.arg, opts);
+            const funcMap = {
+                sin: '\\sin', cos: '\\cos', tan: '\\tan', cot: '\\cot', sec: '\\sec', csc: '\\csc',
+                arcsin: '\\arcsin', arccos: '\\arccos', arctan: '\\arctan',
+                sinh: '\\sinh', cosh: '\\cosh', tanh: '\\tanh',
+                ln: '\\ln', log: '\\log', exp: 'e^', sqrt: '\\sqrt'
+            };
+            const prefix = funcMap[expression.name] || `\\operatorname{${expression.name}}`;
+            if (expression.name === 'exp' || expression.name === 'sqrt') return `${prefix}{${argLatex}}`;
+            return `${prefix}\\left(${argLatex}\\right)`;
+        }
+        case 'add': return `${slangToLatex(expression.left, opts)} + ${slangToLatex(expression.right, opts)}`;
+        case 'mul': return `${slangToLatex(expression.left, opts)} ${slangToLatex(expression.right, opts)}`;
+        case 'pow': return `${slangToLatex(expression.base, opts)}^{${slangToLatex(expression.exp, opts)}}`;
+        case 'neg': return `-${slangToLatex(expression.arg, opts)}`;
+        case 'div': return `\\frac{${slangToLatex(expression.top, opts)}}{${slangToLatex(expression.bot, opts)}}`;
     }
+}
+
+// Handle legacy function expressions
+if (expression.type === 'function') {
+    const funcName = expression.name;
+    const arg = expression.args[0];
+    const argLatex = slangToLatex(arg, opts);
+    return `\\${funcName}{${argLatex}}`;
+}
     
     if (expression.terms) {
         // It's a polynomial
@@ -319,11 +344,11 @@ function latexToSlang(latex, options = {}) {
     
     try {
         // Strategy 1: Try functions first (trigonometric, etc.)
-        // Check for functions with proper pattern
-        const funcMatch = latex.match(/^\\(sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|sinh|cosh|tanh|ln|log|exp|sqrt)\s*\{([^{}]+)\}$/);
-        if (funcMatch) {
-            return parseFunction(latex);
-        }
+        const funcNames = ['sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh', 'ln', 'log', 'exp', 'sqrt'];
+        const funcRegex = new RegExp(`^\\\\(${funcNames.join('|')})\\s*(?:\\(([^()]*(?:\\([^()]*\\)[^()]*)*)\\)|\\{([^{}]*(?:\\{[^{}]*\\}[^{}]*)*)\\})$`);
+        if (funcRegex.test(latex)) {
+        return parseFunction(latex);
+         }
         
         // Strategy 2: Try fraction next (most complex)
         if (latex.includes('\\frac')) {
@@ -357,17 +382,55 @@ function latexToSlang(latex, options = {}) {
 }
 
 /**
- * Parse LaTeX functions like sin(x), cos(x), etc.
+ * Parse LaTeX functions like \sin(x), \cos(x), etc. into Symbolic AST
  */
 function parseFunction(funcStr) {
-    const funcMatch = funcStr.match(/\\(sin|cos|tan|cot|sec|csc|arcsin|arccos|arctan|sinh|cosh|tanh|ln|log|exp|sqrt)\s*\{([^{}]+)\}/);
-    if (!funcMatch) {
+    const funcNames = ['sin', 'cos', 'tan', 'cot', 'sec', 'csc', 'arcsin', 'arccos', 'arctan', 'sinh', 'cosh', 'tanh', 'ln', 'log', 'exp', 'sqrt'];
+    const regex = new RegExp(`^\\\\(${funcNames.join('|')})\\s*(?:\\(([^()]*(?:\\([^()]*\\)[^()]*)*)\\)|\\{([^{}]*(?:\\{[^{}]*\\}[^{}]*)*)\\})$`);
+    const match = funcStr.match(regex);
+    if (!match) {
         throw new Error(`Invalid function format: ${funcStr}`);
     }
+    const funcName = match[1];
+    const argStr = (match[2] !== undefined ? match[2] : match[3]).trim();
     
-    const funcName = funcMatch[1];
-    const argStr = funcMatch[2];
-    const arg = parsePolynomial(argStr);
+    let argExpr;
+    if (/^[a-zA-Z]$/.test(argStr)) {
+        argExpr = { type: 'var', name: argStr };
+    } else if (/^\d+(\.\d+)?$/.test(argStr)) {
+        argExpr = { type: 'const', value: parseFloat(argStr) };
+    } else {
+        try {
+            const term = parseTerm(argStr);
+            argExpr = slangTermToSym(term);
+        } catch (e) {
+            throw new Error(`Unsupported function argument: ${argStr}`);
+        }
+    }
+    
+    return {
+        type: 'fn',
+        name: funcName,
+        arg: argExpr
+    };
+}
+
+/**
+ * Helper to convert old SLaNg term to Symbolic AST
+ */
+function slangTermToSym(term) {
+    let result = { type: 'const', value: term.coeff };
+    if (term.var) {
+        for (const [varName, power] of Object.entries(term.var)) {
+            let varExpr = { type: 'var', name: varName };
+            if (power !== 1) {
+                varExpr = { type: 'pow', base: varExpr, exp: { type: 'const', value: power } };
+            }
+            result = { type: 'mul', left: result, right: varExpr };
+        }
+    }
+    return result;
+}
     
     // Return a special function structure
     return {
