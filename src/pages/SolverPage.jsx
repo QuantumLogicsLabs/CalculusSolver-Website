@@ -4,8 +4,9 @@ import { PageWrap, SectionTitle, Card, Tag, Divider, Grid, EyebrowLabel } from "
 import { solve as apiSolve, checkHealth } from "../api/calculusSolverClient.js";
 import SlangTreeView from "../components/SlangTreeView.jsx";
 
-// Import SLaNg mathematical engine for local parsing and formatting
 import { latexToSlang, slangToLatex } from "../slang/convertor.js";
+// Import Symbolic Engine for function differentiation/integration
+import { symDiff, symIntegrate, symSimplify, symToLatex } from "../slang/symbolic.js";
 
 const MOCK = {
     status: "solved", rule: "mock_rule", confidence: 0.99, verified: true,
@@ -51,22 +52,46 @@ export default function SolverPage() {
             return;
         }
 
-        try {
-            if (useMock) {
-                await new Promise(r => setTimeout(r, 1100));
-                setResult(MOCK);
-                setNormalOut(slangToLatex(MOCK.expr));
+            try {
+        // Route function-type input through the symbolic engine
+        if (slangExpr.type) {
+            let resultExpr;
+            if (op === 'diff') {
+                resultExpr = symSimplify(symDiff(slangExpr, variable));
+            } else if (op === 'integrate') {
+                resultExpr = symIntegrate(slangExpr, variable);
+                if (!resultExpr) throw new Error("Unable to integrate symbolically.");
+                resultExpr = symSimplify(resultExpr);
             } else {
-                const data = await apiSolve(slangExpr, op, variable);
-                setResult(data);
-                // Convert Output SLaNg back to Normal Math formatting locally
-                if (data.expr) {
-                    setNormalOut(slangToLatex(data.expr));
-                }
+                throw new Error("Symbolic engine currently supports Differentiate and Integrate.");
             }
-        } catch (err) {
-            setError(err.message);
-        } finally { setLoading(false); }
+            
+            const symResult = {
+                status: "solved",
+                rule: "symbolic_engine",
+                confidence: 1.0,
+                verified: true,
+                expr: resultExpr,
+                steps: [{ rule: "symbolic_rule", description: `Computed via symbolic ${op === 'diff' ? 'differentiation' : 'integration'}` }]
+            };
+            setResult(symResult);
+            setNormalOut(symToLatex(resultExpr));
+        } 
+        // Existing polynomial path (completely unchanged)
+        else if (useMock) {
+            await new Promise(r => setTimeout(r, 1100));
+            setResult(MOCK);
+            setNormalOut(slangToLatex(MOCK.expr));
+        } else {
+            const data = await apiSolve(slangExpr, op, variable);
+            setResult(data);
+            if (data.expr) {
+                setNormalOut(slangToLatex(data.expr));
+            }
+        }
+    } catch (err) {
+        setError(err.message);
+    } finally { setLoading(false); }
     }
 
     const c = {
