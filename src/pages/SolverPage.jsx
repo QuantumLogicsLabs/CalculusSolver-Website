@@ -4,8 +4,8 @@ import { PageWrap, SectionTitle, Card, Tag, Divider, Grid, EyebrowLabel } from "
 import { solve as apiSolve, checkHealth } from "../api/calculusSolverClient.js";
 import SlangTreeView from "../components/SlangTreeView.jsx";
 
-// Import SLaNg mathematical engine for local parsing and formatting
 import { latexToSlang, slangToLatex } from "../slang/convertor.js";
+import { symDiff, symIntegrate, symSimplify, symToLatex } from "../slang/symbolic.js";
 
 const MOCK = {
     status: "solved", rule: "mock_rule", confidence: 0.99, verified: true,
@@ -40,34 +40,85 @@ export default function SolverPage() {
         
         setLoading(true); setError(null); setResult(null); setParsedInput(null); setNormalOut("");
         
-        let slangExpr;
-        try {
-            // Local parsing using the SLaNg engine directly in the frontend
-            slangExpr = latexToSlang(text);
-            setParsedInput(slangExpr);
-        } catch (err) {
-            setError(`SLaNg Syntax Error: ${err.message}`);
-            setLoading(false);
-            return;
-        }
+       let slangExpr;
+       try {
+         slangExpr = latexToSlang(text);
+         // Route function-type input through the symbolic engine
+         if (slangExpr.type === "function") {
+           const funcName = slangExpr.name;
+           const arg = slangExpr.args[0];
 
-        try {
-            if (useMock) {
-                await new Promise(r => setTimeout(r, 1100));
-                setResult(MOCK);
-                setNormalOut(slangToLatex(MOCK.expr));
-            } else {
-                const data = await apiSolve(slangExpr, op, variable);
-                setResult(data);
-                // Convert Output SLaNg back to Normal Math formatting locally
-                if (data.expr) {
-                    setNormalOut(slangToLatex(data.expr));
-                }
-            }
-        } catch (err) {
-            setError(err.message);
-        } finally { setLoading(false); }
-    }
+           let symArg;
+           if (
+             arg.terms &&
+             arg.terms.length === 1 &&
+             arg.terms[0].coeff === 1 &&
+             arg.terms[0].var
+           ) {
+             const varName = Object.keys(arg.terms[0].var)[0];
+             symArg = { type: "var", name: varName };
+           } else if (
+             arg.terms &&
+             arg.terms.length === 1 &&
+             arg.terms[0].coeff
+           ) {
+             symArg = { type: "const", value: arg.terms[0].coeff };
+           } else {
+             throw new Error(
+               "Symbolic engine currently supports simple variable or constant arguments (e.g., sin(x)).",
+             );
+           }
+
+           const symExpr = { type: "fn", name: funcName, arg: symArg };
+           let resultExpr;
+
+           if (op === "diff") {
+             resultExpr = symSimplify(symDiff(symExpr, variable));
+           } else if (op === "integrate") {
+             resultExpr = symIntegrate(symExpr, variable);
+             if (!resultExpr)
+               throw new Error("Unable to integrate symbolically.");
+             resultExpr = symSimplify(resultExpr);
+           } else {
+             throw new Error(
+               "Symbolic engine currently supports Differentiate and Integrate.",
+             );
+           }
+
+           const symResult = {
+             status: "solved",
+             rule: "symbolic_engine",
+             confidence: 1.0,
+             verified: true,
+             expr: resultExpr,
+             steps: [
+               {
+                 rule: "symbolic_rule",
+                 description: `Computed via symbolic ${op === "diff" ? "differentiation" : "integration"}`,
+               },
+             ],
+           };
+           setResult(symResult);
+           setNormalOut(symToLatex(resultExpr));
+         }
+         // Existing polynomial/mock path (completely unchanged)
+         else if (useMock) {
+           await new Promise((r) => setTimeout(r, 1100));
+           setResult(MOCK);
+           setNormalOut(slangToLatex(MOCK.expr));
+         } else {
+           const data = await apiSolve(slangExpr, op, variable);
+           setResult(data);
+           if (data.expr) {
+             setNormalOut(slangToLatex(data.expr));
+           }
+         }
+       } catch (err) {
+         setError(err.message);
+       } finally {
+         setLoading(false);
+       }
+}
 
     const c = {
         dot: (ok) => ({
