@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { PageWrap, SectionTitle, Card, Tag, Divider, Grid, EyebrowLabel } from "../components/ui.jsx";
 import { solve as apiSolve, checkHealth } from "../api/calculusSolverClient.js";
 import SlangTreeView from "../components/SlangTreeView.jsx";
+import GraphPlotter from "../components/GraphPlotter.jsx";
 
 import { latexToSlang, slangToLatex } from "../slang/convertor.js";
 import { symDiff, symIntegrate, symSimplify, symToLatex } from "../slang/symbolic.js";
@@ -17,6 +18,8 @@ const OPS = [
     { value: "diff",          label: "Differentiate  d/dx" },
     { value: "integrate",     label: "Integrate  ∯ dx" },
     { value: "gradient",      label: "Gradient  ∇f" },
+    { value: "hessian",       label: "Hessian Matrix  H(f)" },
+    { value: "tangent_line",  label: "Tangent Line  y = mx + b" },
 ];
 
 export default function SolverPage() {
@@ -101,7 +104,6 @@ export default function SolverPage() {
            setResult(symResult);
            setNormalOut(symToLatex(resultExpr));
          }
-         // Existing polynomial/mock path (completely unchanged)
          else if (useMock) {
            await new Promise((r) => setTimeout(r, 1100));
            setResult(MOCK);
@@ -252,7 +254,7 @@ export default function SolverPage() {
                         </Card>
                     )}
 
-                    {/* OUTPUT SLaNg Tree */}
+                    {/* OUTPUT SLaNg Tree & 2D Visualizer */}
                     {result && (
                         <Card glow={true} accent="#10b981" style={{ background: "rgba(6, 78, 59, 0.2)", backdropFilter: "blur(12px)" }}>
                             <EyebrowLabel color="#34d399">Backend Solver Output</EyebrowLabel>
@@ -280,8 +282,11 @@ export default function SolverPage() {
                                 </div>
                             </Grid>
 
+                            {/* Graph Plotter Component */}
+                            <GraphPlotter result={result} variable={variable} />
+
                             {result.expr && (
-                                <div style={{ marginTop: 8 }}>
+                                <div style={{ marginTop: 24 }}>
                                     <div style={{ marginBottom: 12 }}><Tag color="#34d399">Response SLaNg Tree</Tag></div>
                                     <SlangTreeView expr={result.expr} label="Result Graph" />
                                 </div>
@@ -312,3 +317,4 @@ export default function SolverPage() {
         </PageWrap>
     );
 }
+
