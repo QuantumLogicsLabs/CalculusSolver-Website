@@ -56,6 +56,8 @@ function Shell() {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [logoError, setLogoError] = useState(false);
+  const [logoHovered, setLogoHovered] = useState(false);
 
   const active =
     NAV.find(
@@ -113,6 +115,8 @@ function Shell() {
       >
         {/* Brand */}
         <div
+          onMouseEnter={() => setLogoHovered(true)}
+          onMouseLeave={() => setLogoHovered(false)}
           style={{
             display: "flex",
             alignItems: "center",
@@ -122,25 +126,67 @@ function Shell() {
           }}
           onClick={() => navigate("/overview")}
         >
-          {/* Logo mark */}
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              background: "linear-gradient(135deg, #7C6FFF 0%, #22D3EE 100%)",
-              borderRadius: 8,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 16,
-              color: "#fff",
-              fontWeight: 700,
-              flexShrink: 0,
-              boxShadow:
-                "0 0 20px rgba(124,111,255,0.35), 0 0 6px rgba(34,211,238,0.2)",
-            }}
-          >
-            ∫
+          <div className={`brand-logo-container ${logoHovered ? "hovered" : ""}`}>
+            {!logoError ? (
+              <>
+                <img
+                  src="/calsolver.png"
+                  alt="CalculusSolver logo"
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    borderRadius: 8,
+                    objectFit: "cover",
+                    display: "block",
+                    filter: "none",
+                    boxShadow: "none",
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    zIndex: 2,
+                  }}
+                  onError={() => {
+                    setLogoError(true);
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: "-150%",
+                    width: "60%",
+                    height: "100%",
+                    background: "linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent)",
+                    transform: "skewX(-25deg)",
+                    zIndex: 3,
+                    animation: "logoShimmer 4s infinite ease-in-out",
+                    pointerEvents: "none",
+                  }}
+                />
+              </>
+            ) : (
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  background: "linear-gradient(135deg, #7C6FFF 0%, #22D3EE 100%)",
+                  borderRadius: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 16,
+                  color: "#fff",
+                  fontWeight: 700,
+                  flexShrink: 0,
+                  boxShadow: "0 0 20px rgba(124,111,255,0.35), 0 0 6px rgba(34,211,238,0.2)",
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                }}
+              >
+                ∫
+              </div>
+            )}
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
